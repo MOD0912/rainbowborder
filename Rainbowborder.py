@@ -10,6 +10,7 @@ Date: September 2025
 """
 
 import customtkinter as ctk
+from PIL import Image, ImageTk
 
 
 class RainbowBorder(ctk.CTkCanvas):
@@ -37,18 +38,18 @@ class RainbowBorder(ctk.CTkCanvas):
         kwargs.setdefault('relief', 'flat')  # Flat relief
 
 
-        super().__init__(master, bg="#1f1f1f", **kwargs)
+        super().__init__(master, bg=color, **kwargs)
         self._border_width = border_width
         self._corner_radius = corner_radius
-        self.color = color
-        self.position = 0  # Current animation position around the perimeter
+        self.position = 0
         self.fps = fps
-
-
+        self.background_image_id = None  # Store background image ID
+        self.persistent_items = set()  # Store IDs of items that shouldn't be deleted
+        
         # Bind window resize event to redraw the border
         self.bind("<Configure>", self._on_configure)
         
-        self.lower("all")
+        self.lift("all")
         
         # Pack the widget to fill the entire window with no padding
         self.pack(fill="both", expand=True, padx=0, pady=0)
@@ -72,14 +73,29 @@ class RainbowBorder(ctk.CTkCanvas):
         self.lower("all")
         self.after(1000 // self.fps, self._animate)  # Schedule next frame
 
+    def set_background_image(self, image):
+        """Set a background image that won't be deleted during animation."""
+        if self.background_image_id:
+            self.delete(self.background_image_id)
+            self.persistent_items.discard(self.background_image_id)
+        self.background_image_id = self.create_image(0, 0, anchor="nw", image=image)
+        self.persistent_items.add(self.background_image_id)
+
+    def create_persistent_text(self, x, y, **kwargs):
+        """Create text that won't be deleted during animation."""
+        text_id = self.create_text(x, y, **kwargs)
+        self.persistent_items.add(text_id)
+        return text_id
+
+    def create_persistent_item(self, item_type, *args, **kwargs):
+        """Create any canvas item that won't be deleted during animation."""
+        create_method = getattr(self, f"create_{item_type}")
+        item_id = create_method(*args, **kwargs)
+        self.persistent_items.add(item_id)
+        return item_id
+
     def _draw_gradient(self):
-        """
-        Draw the complete rainbow border by rendering each border segment.
-        
-        The border is divided into four segments (top, right, bottom, left) and
-        each segment is drawn with the appropriate rainbow colors based on the
-        current animation position.
-        """
+        """Draw the complete rainbow border while preserving background image."""
         # Get current window dimensions
         self.width = self.winfo_width()
         self.height = self.winfo_height()
@@ -89,8 +105,14 @@ class RainbowBorder(ctk.CTkCanvas):
         if self.width <= border_width or self.height <= border_width:
             return
 
-        # Clear previous frame
-        self.delete("all")
+        # Clear only border elements, not persistent items
+        items_to_delete = []
+        for item in self.find_all():
+            if item not in self.persistent_items:
+                items_to_delete.append(item)
+        
+        for item in items_to_delete:
+            self.delete(item)
 
         # Calculate total perimeter including rounded corners
         import math
@@ -390,21 +412,36 @@ class RainbowBorder(ctk.CTkCanvas):
 
 
 if __name__ == "__main__":
-    """
-    Main execution block - creates and runs the rainbow border demonstration.
-    
-    This creates a small window with an animated rainbow border that continuously
-    cycles colors around the perimeter. Perfect for testing or as a decorative
-    element in larger applications.
-    """
-    # Create the main application window
     root = ctk.CTk()
-    root.resizable(False, False)  # Fixed size window
-    #root.geometry("300x500+1130+700")  # Width x Height + X_offset + Y_offset
-    root.title("Rainbow Border Demo")  # Window title
-    # Create the rainbow border widget with rounded corners
-    rainbow_border = RainbowBorder(root, border_width=5, corner_radius=10)
-    
+    root.resizable(False, False)
+    root.geometry("1500x900+530+350")
+    root.title("Rainbow Border Demo - Login Screen")
 
-    # Start the GUI event loop
+    rainbow_border = RainbowBorder(root, border_width=5, corner_radius=10, color="#2b2b2b")
+    rainbow_border.grid_columnconfigure((0, 1, 2, 3, 4, 5, 6, 7, 8, 9), weight=1)
+    rainbow_border.grid_rowconfigure((0, 1, 2, 3, 4, 5, 6, 7, 8, 9), weight=1)
+    
+    # Load and set background image
+    img = Image.open("bg_gradient.jpg").resize((1500, 900))
+    photo = ImageTk.PhotoImage(img)
+    rainbow_border.photo = photo  # Keep reference
+    rainbow_border.set_background_image(rainbow_border.photo)
+    # Use persistent text method so it won't be deleted during animation
+    rainbow_border.create_persistent_text(450, 450, text="Welcome back", 
+                                         font=("Arial", 30, "bold"), 
+                                         fill="white", 
+                                         anchor="center")
+    
+    rainbow_border.create_persistent_text(450, 500, text="Please log in to continue", 
+                                         font=("Arial", 20), 
+                                         fill="white", 
+                                         anchor="center")
+    
+    Username_entry = ctk.CTkEntry(rainbow_border, placeholder_text="Username", width=300, corner_radius=0, font=("Arial", 40))
+    Username_entry.grid(row=4, column=7, columnspan=2, sticky="nsew", pady=(0, 30))
+    Password_entry = ctk.CTkEntry(rainbow_border, placeholder_text="Password", show="*", width=300, corner_radius=0, font=("Arial", 40))
+    Password_entry.grid(row=5, column=7, columnspan=2, sticky="nsew", pady=(0, 30))
+    Login_button = ctk.CTkButton(rainbow_border, text="Login", width=100, corner_radius=0, font=("Arial", 40))
+    Login_button.grid(row=7, column=7, columnspan=2, sticky="nsew", pady=(0, 30))
+
     root.mainloop()
